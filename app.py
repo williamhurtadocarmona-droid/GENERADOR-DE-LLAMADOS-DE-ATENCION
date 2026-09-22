@@ -17,8 +17,8 @@ st.write("Sube tu archivo de Excel, selecciona el aprendiz y genera el archivo d
 excel_file = st.file_uploader("1. Sube tu archivo de Excel (.xlsx)", type=["xlsx", "xls"])
 
 if excel_file is not None:
-    # Leer todas las hojas o la primera por defecto
-    df = pd.read_excel(excel_file)
+# Omitir las primeras 12 filas del reporte del SENA para leer la tabla correcta
+    df = pd.read_excel(excel_file, skiprows=12)
     st.success("¡Archivo de Excel cargado correctamente!")
     
     # 2. Selección de la columna que identifica al Aprendiz
