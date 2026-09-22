@@ -2,118 +2,118 @@ import streamlit as st
 import pandas as pd
 from docx import Document
 import io
-from fpdf import FPDF
+from datetime import datetime
+import os
 
-# Configuración de la página
 st.set_page_config(page_title="Generador de Llamados de Atención", page_icon="📄", layout="centered")
 
-st.title("📄 Generador de Llamados de Atención")
-st.write("Sube tu plantilla de Word y el archivo de Excel para generar los documentos automáticamente.")
+st.title("📄 Generador de Llamados de Atención Disciplinario")
+st.write("Sube el reporte del SENA, escribe tus datos como instructor y genera el documento al instante.")
 
-# 1. Subir la plantilla de Word
-plantilla_file = st.file_uploader("1. Sube tu plantilla de Word (.docx)", type=["docx"])
+# 1. Campo para ingresar el Nombre del Instructor
+nombre_instructor = st.text_input("Nombre del Instructor:", placeholder="Ej: William Hurtado")
 
-# 2. Subir el archivo de Excel (Acepta .xlsx y .xls)
-excel_file = st.file_uploader("2. Sube el reporte de Excel (.xlsx o .xls)", type=["xlsx", "xls"])
+# 2. Cargar la Plantilla de Word (Opcional)
+template_file = st.file_uploader("1. Sube tu plantilla de Word (.docx) - Opcional", type=["docx"])
 
-def convertir_docx_a_pdf(doc_bytes):
-    doc = Document(io.BytesIO(doc_bytes))
-    pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.add_page()
-    pdf.set_font("Arial", size=11)
-    
-    for p in doc.paragraphs:
-        texto = p.text.strip()
-        if texto:
-            texto_limpio = texto.encode('latin-1', 'replace').decode('latin-1')
-            pdf.multi_cell(0, 8, txt=texto_limpio)
-            pdf.ln(2)
-            
-    for table in doc.tables:
-        for row in table.rows:
-            fila_texto = " | ".join([cell.text.strip() for cell in row.cells])
-            if fila_texto.strip():
-                fila_limpia = fila_texto.encode('latin-1', 'replace').decode('latin-1')
-                pdf.multi_cell(0, 7, txt=fila_limpia)
-        pdf.ln(4)
-        
-    return pdf.output(dest='S').encode('latin-1')
+# 3. Cargar el archivo de Excel de Sofia Plus
+excel_file = st.file_uploader("2. Sube tu reporte en Excel (.xlsx / .xls)", type=["xlsx", "xls"])
 
-if excel_file:
+if excel_file is not None and nombre_instructor:
     try:
-        # Intentar leer el Excel omitiendo posibles filas de encabezado de Sofia Plus
-        try:
-            df = pd.read_excel(excel_file)
-        except Exception:
-            df = pd.read_excel(excel_file, engine='xlrd')
+        # Definir la fuente de la plantilla
+        doc_source = None
+        if template_file is not None:
+            doc_source = template_file
+        elif os.path.exists("Llamado de atencion.docx"):
+            doc_source = "Llamado de atencion.docx"
+        elif os.path.exists("plantilla.docx"):
+            doc_source = "plantilla.docx"
             
-        st.success("¡Archivo de Excel cargado correctamente!")
-        
-        # Buscar coincidencias comunes en los nombres de las columnas
-        columnas_posibles = [col for col in df.columns if any(p in str(col).upper() for p in ['NOMBRE', 'APRENDIZ', 'NOMBRES', 'ESTUDIANTE', 'USUARIO'])]
-        
-        if columnas_posibles:
-            col_nombre = columnas_posibles[0]
+        if doc_source is None:
+            st.error("⚠️ No se encontró la plantilla de Word. Por favor sube el archivo .docx arriba.")
         else:
-            # Si no encuentra ninguna conocida, le permite al usuario elegir la columna correcta
-            st.warning("No se identificó automáticamente la columna de nombres.")
-            col_nombre = st.selectbox("Selecciona la columna donde están los nombres de los aprendices:", df.columns)
+            # Extraer automáticamente Ficha y Programa del reporte de Sofia Plus
+            df_encabezado = pd.read_excel(excel_file, nrows=12, header=None)
             
-        aprendiz_seleccionado = st.selectbox("Selecciona el aprendiz:", df[col_nombre].dropna().unique())
-        
-        fila_datos = df[df[col_nombre] == aprendiz_seleccionado].iloc[0]
-        
-        if st.button("🚀 Generar Documentos"):
-            if plantilla_file:
-                doc = Document(plantilla_file)
-            else:
-                doc = Document("Llamado de atencion.docx")
+            ficha = str(df_encabezado.iloc[2, 2]).strip() if len(df_encabezado) > 2 else ""
+            programa = str(df_encabezado.iloc[5, 2]).strip() if len(df_encabezado) > 5 else ""
+
+            # Leer la tabla de aprendices saltando las 12 filas del reporte
+            df = pd.read_excel(excel_file, skiprows=12)
+            st.success("¡Reporte del SENA cargado correctamente!")
             
-            # Reemplazo de etiquetas {{COLUMNA}}
-            datos_reemplazo = {f"{{{{{col}}}}}": str(val) for col, val in fila_datos.items()}
+            # Limpiar nombres de columnas
+            df.columns = [str(c).strip() for c in df.columns]
             
-            for p in doc.paragraphs:
-                for tag, val in datos_reemplazo.items():
-                    if tag in p.text:
-                        p.text = p.text.replace(tag, val)
-                        
-            for table in doc.tables:
-                for row in table.rows:
-                    for cell in row.cells:
-                        for p in cell.paragraphs:
-                            for tag, val in datos_reemplazo.items():
-                                if tag in p.text:
-                                    p.text = p.text.replace(tag, val)
+            # Identificar columnas del estándar SENA
+            col_nombre = "Nombre" if "Nombre" in df.columns else df.columns[2]
+            col_apellido = "Apellidos" if "Apellidos" in df.columns else df.columns[3]
+            col_cedula = "Número de" if "Número de" in df.columns else df.columns[1]
+
+            # Combinar Nombre + Apellidos
+            df['NOMBRE_COMPLETO'] = df[col_nombre].astype(str) + " " + df[col_apellido].astype(str)
             
-            buffer_word = io.BytesIO()
-            doc.save(buffer_word)
-            buffer_word.seek(0)
-            word_bytes = buffer_word.getvalue()
+            # Lista desplegable de aprendices
+            aprendiz_seleccionado = st.selectbox("3. Selecciona el Aprendiz:", df['NOMBRE_COMPLETO'].unique())
             
-            st.subheader("🎉 Documento generado con éxito")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.download_button(
-                    label="📥 Descargar Word (.docx)",
-                    data=word_bytes,
-                    file_name=f"Llamado_Atencion_{aprendiz_seleccionado}.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                )
-            
-            with col2:
-                try:
-                    pdf_bytes = convertir_docx_a_pdf(word_bytes)
-                    st.download_button(
-                        label="📕 Descargar PDF (.pdf)",
-                        data=pdf_bytes,
-                        file_name=f"Llamado_Atencion_{aprendiz_seleccionado}.pdf",
-                        mime="application/pdf"
-                    )
-                except Exception:
-                    st.warning("El archivo de Word está listo para descargar.")
+            if aprendiz_seleccionado:
+                fila_datos = df[df['NOMBRE_COMPLETO'] == aprendiz_seleccionado].iloc[0]
+                cedula_aprendiz = str(fila_datos[col_cedula]).strip()
+                
+                # Fecha actual automática
+                fecha_hoy = datetime.now().strftime("%d/%m/%Y")
+
+                with st.expander("Ver datos que se reemplazarán en el documento"):
+                    st.write(f"**Fecha del Llamado:** {fecha_hoy}")
+                    st.write(f"**Instructor:** {nombre_instructor}")
+                    st.write(f"**Aprendiz:** {aprendiz_seleccionado} - C.C. {cedula_aprendiz}")
+                    st.write(f"**Programa:** {programa}")
+                    st.write(f"**Ficha:** {ficha}")
+
+                # Botón de Generación
+                if st.button("🚀 Generar Llamado de Atención"):
+                    if isinstance(doc_source, str):
+                        doc = Document(doc_source)
+                    else:
+                        doc = Document(io.BytesIO(doc_source.getvalue()))
                     
+                    reemplazos = {
+                        "{{NOMBRE DEL PROGRAMA}}": programa,
+                        "{{FECHA}}": fecha_hoy,
+                        "{{NOMBRES Y CEDULA DEL APRENDIZ}}": f"{aprendiz_seleccionado} - C.C. {cedula_aprendiz}",
+                        "{{FICHA}}": ficha,
+                        "{{NOMBRE DEL INSTRUCTOR}}": nombre_instructor
+                    }
+                    
+                    # Reemplazo en párrafos
+                    for p in doc.paragraphs:
+                        for tag, valor in reemplazos.items():
+                            if tag in p.text:
+                                p.text = p.text.replace(tag, valor)
+                                
+                    # Reemplazo en tablas
+                    for tabla in doc.tables:
+                        for fila_tabla in tabla.rows:
+                            for celda in fila_tabla.cells:
+                                for p in celda.paragraphs:
+                                    for tag, valor in reemplazos.items():
+                                        if tag in p.text:
+                                            p.text = p.text.replace(tag, valor)
+                    
+                    output = io.BytesIO()
+                    doc.save(output)
+                    output.seek(0)
+                    
+                    st.download_button(
+                        label="📥 Descargar Documento Listo",
+                        data=output,
+                        file_name=f"Llamado_Atencion_{aprendiz_seleccionado}.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    )
+                    st.success("¡Documento generado exitosamente!")
+
     except Exception as e:
-        st.error(f"Error al procesar el archivo: {e}")
+        st.error(f"Error procesando el archivo: {e}")
+elif excel_file is not None and not nombre_instructor:
+    st.warning("⚠️ Escribe tu nombre como instructor para continuar.")
