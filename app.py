@@ -15,7 +15,6 @@ plantilla_file = st.file_uploader("1. Sube tu plantilla de Word (.docx)", type=[
 
 # 2. Subir el archivo de Excel
 excel_file = st.file_uploader("2. Sube el reporte de Excel (.xlsx o .xls)", type=["xlsx", "xls"])
-
 # Función para convertir el contenido extraído de Word a PDF usando FPDF
 def convertir_docx_a_pdf(doc_bytes):
     doc = Document(io.BytesIO(doc_bytes))
