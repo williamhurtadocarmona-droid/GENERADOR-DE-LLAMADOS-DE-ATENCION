@@ -71,11 +71,11 @@ if excel_file is not None and nombre_instructor:
             # Limpiar nombres de columnas
             df.columns = [str(c).strip() for c in df.columns]
             
-            # Identificar columnas del estándar SENA de forma robusta
-            col_nombre = next((c for c in df.columns if "nombre" in c.lower()), df.columns[2] if len(df.columns) > 2 else df.columns[0])
-            col_apellido = next((c for c in df.columns if "apellido" in c.lower()), df.columns[3] if len(df.columns) > 3 else df.columns[0])
-            col_cedula = next((c for c in df.columns if "número" in c.lower() or "doc" in c.lower() or "ident" in c.lower()), df.columns[1] if len(df.columns) > 1 else df.columns[0])
+            # Detección de columnas
             col_tipo_doc = next((c for c in df.columns if "tipo" in c.lower()), df.columns[0] if len(df.columns) > 0 else "")
+            col_cedula = next((c for c in df.columns if any(k in c.lower() for k in ["número", "documento", "identificación", "cedula"]) and c != col_tipo_doc), df.columns[1] if len(df.columns) > 1 else df.columns[0])
+            col_nombre = next((c for c in df.columns if "nombre" in c.lower() and "apellido" not in c.lower()), df.columns[2] if len(df.columns) > 2 else df.columns[0])
+            col_apellido = next((c for c in df.columns if "apellido" in c.lower()), df.columns[3] if len(df.columns) > 3 else df.columns[0])
 
             # Combinar Nombre + Apellidos
             df['NOMBRE_COMPLETO'] = df[col_nombre].astype(str) + " " + df[col_apellido].astype(str)
@@ -88,13 +88,18 @@ if excel_file is not None and nombre_instructor:
                 cedula_aprendiz = str(fila_datos[col_cedula]).strip()
                 tipo_doc_aprendiz = str(fila_datos[col_tipo_doc]).strip() if col_tipo_doc in df.columns else "C.C."
                 
+                st.markdown("### 📝 Descripción de la Evidencia o Hechos")
+                texto_evidencia = st.text_area(
+                    "Escribe aquí la descripción de la falta o lo ocurrido para la tabla:",
+                    value="Informe del instructor y registro de observación directa sobre el uso inadecuado de un dispositivo de sonido (parlante) a alto volumen dentro del ambiente de formación (aula/taller), alterando la convivencia y el desarrollo normal de las actividades académicas.",
+                    height=120
+                )
+
                 # Datos adicionales si es segundo llamado
                 fecha_primer_llamado = ""
-                descripcion_hechos = "Informe del instructor y registro de observación directa sobre el incumplimiento de los deberes del aprendiz."
                 if "Segundo" in tipo_llamado:
-                    st.markdown("### 📋 Detalles adicionales para el Segundo Llamado")
+                    st.markdown("### 📋 Datos adicionales para el Segundo Llamado")
                     fecha_primer_llamado = st.text_input("Fecha del Primer Llamado de Atención:", value="DD/MM/AAAA")
-                    descripcion_hechos = st.text_area("Descripción de la falta / reincidencia:", value="Informe del instructor sobre la reincidencia en el incumplimiento de las normas de convivencia y desarrollo de actividades.")
 
                 fecha_hoy = datetime.now().strftime("%d/%m/%Y")
 
@@ -105,6 +110,7 @@ if excel_file is not None and nombre_instructor:
                     st.write(f"**Aprendiz:** {aprendiz_seleccionado} ({tipo_doc_aprendiz} {cedula_aprendiz})")
                     st.write(f"**Programa:** {programa}")
                     st.write(f"**Ficha:** {ficha}")
+                    st.write(f"**Evidencia:** {texto_evidencia}")
                     if "Segundo" in tipo_llamado:
                         st.write(f"**Fecha 1er Llamado:** {fecha_primer_llamado}")
 
@@ -118,7 +124,7 @@ if excel_file is not None and nombre_instructor:
                     reemplazos = {
                         "{{PROGRAMA}}": programa,
                         "{{NOMBRE DEL PROGRAMA}}": programa,
-                        "{{CIUDAD}}": "Barranquilla", # Predeterminado Centro Nacional Colombo Alemán
+                        "{{CIUDAD}}": "Barranquilla",
                         "{{FECHA}}": fecha_hoy,
                         "{{NOMBRE DEL APRENDIZ}}": aprendiz_seleccionado,
                         "{{TIPO DE DOCUEMNTO}}": tipo_doc_aprendiz,
@@ -129,7 +135,7 @@ if excel_file is not None and nombre_instructor:
                         "{{Nombre del instructor}}": nombre_instructor,
                         "{{NOMBRE DEL INSTRUCTOR}}": nombre_instructor,
                         "{{FECHA DEL PRIMER LLAMADO}}": fecha_primer_llamado,
-                        "{{DESCRIPCION DE LOS HECHOS}}": descripcion_hechos
+                        "{{DESCRIPCION DE LOS HECHOS}}": texto_evidencia
                     }
                     
                     # Reemplazo en párrafos
@@ -146,6 +152,8 @@ if excel_file is not None and nombre_instructor:
                                     for tag, valor in reemplazos.items():
                                         if tag in p.text:
                                             p.text = p.text.replace(tag, valor)
+                                    if "Informe del instructor y registro de observación directa" in p.text and "{{DESCRIPCION DE LOS HECHOS}}" not in p.text:
+                                        p.text = texto_evidencia
                     
                     output = io.BytesIO()
                     doc.save(output)
