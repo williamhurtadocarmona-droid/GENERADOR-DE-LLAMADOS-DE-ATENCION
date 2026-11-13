@@ -135,6 +135,7 @@ if excel_file is not None and nombre_instructor:
                         "{{Nombre del instructor}}": nombre_instructor,
                         "{{NOMBRE DEL INSTRUCTOR}}": nombre_instructor,
                         "{{FECHA DEL PRIMER LLAMADO}}": fecha_primer_llamado,
+                        "{{Ingresar aquí lo ocurrido}}": texto_evidencia,
                         "{{DESCRIPCION DE LOS HECHOS}}": texto_evidencia
                     }
                     
@@ -148,12 +149,11 @@ if excel_file is not None and nombre_instructor:
                     for tabla in doc.tables:
                         for fila_tabla in tabla.rows:
                             for celda in fila_tabla.cells:
-                                for p in celda.paragraphs:
-                                    for tag, valor in reemplazos.items():
-                                        if tag in p.text:
-                                            p.text = p.text.replace(tag, valor)
-                                    if "Informe del instructor y registro de observación directa" in p.text and "{{DESCRIPCION DE LOS HECHOS}}" not in p.text:
-                                        p.text = texto_evidencia
+                                for tag, valor in reemplazos.items():
+                                    if tag in celda.text:
+                                        for p in celda.paragraphs:
+                                            if tag in p.text:
+                                                p.text = p.text.replace(tag, valor)
                     
                     output = io.BytesIO()
                     doc.save(output)
